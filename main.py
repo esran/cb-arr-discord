@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from radarr import Radarr
+from radarr import Radarr, radarr_help_text
 
 logger = logging.getLogger(__name__)
 
@@ -67,17 +67,8 @@ async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
 
     # Help - list commands
     if cmd == 'help':
-        help_message = \
-"""!radarr [ status | list | me | tag <id> | untag <id> ]
-    status - show status of radarr
-    list [search terms] - list all movies in radarr
-    me [search times] - show movies tagged with your discord username
-    tag <id> - tag a movie with your discord username
-    untag <id> - untag a movie with your discord username
-      
-If search terms are provided then the #10 matches are shown."""
-
-        await ctx.author.send(f"`{help_message}`")
+        for text in radarr_help_text():
+            await ctx.author.send(f"`{text}`")
 
     # Status - list summary of movies
     elif cmd == 'status':
@@ -97,12 +88,22 @@ If search terms are provided then the #10 matches are shown."""
     # Tag
     elif cmd == 'tag':
         text = RADARR.tag(ctx.author.name, *args)
-        await ctx.send(f"`{text}`")
+        await ctx.author.send(f"`{text}`")
 
     # Untag
     elif cmd == 'untag':
         text = RADARR.untag(ctx.author.name, *args)
-        await ctx.send(f"`{text}`")
+        await ctx.author.send(f"`{text}`")
+
+    # Search
+    elif cmd == 'search':
+        for text in RADARR.search(*args):
+            await ctx.author.send(f"`{text}`")
+
+    # Add movie
+    elif cmd == 'add':
+        for text in RADARR.add_movie(ctx.author.name, *args):
+            await ctx.author.send(f"`{text}`")
 
     else:
         await ctx.send(f"`Unknown command {cmd}`")
