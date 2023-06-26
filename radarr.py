@@ -53,26 +53,39 @@ class Radarr:
         all_movies = self.api.get_movie()
         count = len(all_movies)
 
-        untagged_count = 0
         total_size = 0
         untagged_size = 0
+        untagged_movies = []
         for movie in all_movies:
             total_size += movie["sizeOnDisk"]
             if len(movie["tags"]) == 0:
+                untagged_movies.append(movie)
                 untagged_size += movie["sizeOnDisk"]
-                untagged_count += 1
 
         # Convert sizes to human-readable
         h_total_size = humanize.naturalsize(total_size)
         h_untagged_size = humanize.naturalsize(untagged_size)
 
         # Setup untagged message
+        untagged_count = len(untagged_movies)
         if untagged_count == 0:
             untagged_message = "(all tagged)"
         else:
             untagged_message = f"({untagged_count} untagged totalling {h_untagged_size})"
 
-        return f"There are {count} movies totalling {h_total_size} {untagged_message}"
+        yield f"There are {count} movies totalling {h_total_size} {untagged_message}"
+
+        # List untagged movies
+        if untagged_count > 0:
+            text = ""
+            for movie in untagged_movies:
+                text += f"> {movie['id']:>5}: {movie['title']} ({movie['year']})\n"
+                if len(text) > 1800:
+                    yield text
+                    text = ""
+
+            yield text
+            yield "Use `!radarr tag <id>` to tag a movie for yourself"
 
     def list(self, *args):
         all_movies = self.api.get_movie()

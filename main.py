@@ -10,7 +10,7 @@ from typing import Optional
 
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 from radarr import Radarr, radarr_help_text
 
@@ -21,9 +21,12 @@ ENV_FILE = os.path.join(os.path.dirname(__file__), "config.env")
 
 class Vars:
     def __init__(self):
-        self.radarr_url = os.getenv('RADARR_URL')
-        self.radarr_api_key = os.getenv('RADARR_API_KEY')
-        self.discord_token = os.getenv('DISCORD_TOKEN')
+        self._vars = dotenv_values(ENV_FILE)
+        self.radarr_url = self._vars.get('RADARR_URL')
+        self.radarr_api_key = self._vars.get('RADARR_API_KEY')
+        self.discord_token = self._vars.get('DISCORD_TOKEN')
+        self.discord_channel = self._vars.get('DISCORD_CHANNEL', None)
+        self.log_level = self._vars.get('LOG_LEVEL', 'INFO').upper()
 
 
 # Declare the discord bot up front
@@ -53,7 +56,11 @@ async def on_ready():
 async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
     """radarr command"""
 
-    logger.info("running radarr command")
+    if VARS.discord_channel is not None and ctx.channel.name != VARS.discord_channel:
+        logger.info(f"ignoring channel {ctx.channel.name}")
+        return
+
+    logger.info("running radarr command: %s", cmd)
     # logger.info(f"ctx = {ctx}")
     # logger.info(f"user = {ctx.author}")
     # logger.info(f"cmd = {cmd}")
@@ -63,8 +70,6 @@ async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
     if cmd is None:
         cmd = 'status'
 
-    # Commands
-
     # Help - list commands
     if cmd == 'help':
         for text in radarr_help_text():
@@ -72,8 +77,8 @@ async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
 
     # Status - list summary of movies
     elif cmd == 'status':
-        text = RADARR.status()
-        await ctx.send(f"`{text}`")
+        for text in RADARR.status():
+            await ctx.send(f"`{text}`")
 
     # List - list all movies
     elif cmd == 'list':
@@ -110,9 +115,7 @@ async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
 
 
 if __name__ == '__main__':
-    load_dotenv(ENV_FILE)
-    log_level = os.getenv('LOG_LEVEL', 'INFO')
-    logging.basicConfig(level=log_level)
     VARS = Vars()
+    logging.basicConfig(level=VARS.log_level)
     RADARR = Radarr(VARS.radarr_url, VARS.radarr_api_key)
     BOT.run(VARS.discord_token)
