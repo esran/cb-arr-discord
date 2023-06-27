@@ -17,6 +17,7 @@ USER_TAG_MAP = {
     "bakatron": "nick",
     "spike6112": "spike",
     "seraphaile": "mark",
+    "hobbygrade": "harry",
 }
 
 
