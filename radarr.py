@@ -6,6 +6,7 @@ from typing import List
 import logging
 
 import humanize
+import pyarr.exceptions
 from pyarr import RadarrAPI
 from thefuzz import fuzz
 
@@ -32,16 +33,20 @@ def _filter_movies(movies, *args) -> List[dict]:
 
 
 def radarr_help_text():
-    help_message = """!radarr [ status | list | me | tag <id> | untag <id> | search <title> | add <imdb id> ]
+    help_message = """!radarr [ status | list | me | tag <id> | untag <id> | search <title> | add <tmdb id> ]
 status          - show status of radarr
 list [title]    - list all movies in radarr [by fuzzy title match]
 me [title]      - show your tagged movies [by fuzzy title match]
 tag <id>        - tag a movie with your discord username
 untag <id>      - untag a movie with your discord username
 search <title>  - search for a movie by fuzzy title match
-add <imdb id>   - add a movie to radarr"""
+add <tmdb id>   - add a movie to radarr"""
 
     yield help_message
+
+
+def movie_text_line(movie):
+    return f"{movie['tmdbId']:>7}: {movie['title']} ({movie['year']})"
 
 
 class Radarr:
@@ -80,7 +85,7 @@ class Radarr:
         if untagged_count > 0:
             text = ""
             for movie in untagged_movies:
-                text += f"> {movie['id']:>5}: {movie['title']} ({movie['year']})\n"
+                text += movie_text_line(movie) + "\n"
                 if len(text) > 1800:
                     yield text
                     text = ""
@@ -101,7 +106,7 @@ class Radarr:
             fuzzy_string = ""
             if 'fuzzy_score' in movie:
                 fuzzy_string = f" (fuzzy score: {movie['fuzzy_score']})"
-            all_movies_list += f"{movie['id']:>5}: {movie['title']} ({movie['year']}){fuzzy_string}\n"
+            all_movies_list += movie_text_line(movie) + fuzzy_string + "\n"
             if len(all_movies_list) > 1800:
                 yield all_movies_list
                 all_movies_list = ""
@@ -133,9 +138,12 @@ class Radarr:
                 fuzzy_string = ""
                 if 'fuzzy_score' in movie:
                     fuzzy_string = f" (fuzzy score: {movie['fuzzy_score']})"
-                all_movies_list += f"{movie['id']:>5}: {movie['title']} ({movie['year']}){fuzzy_string}\n"
+                all_movies_list += movie_text_line(movie) + fuzzy_string + "\n"
+                if len(all_movies_list) > 1800:
+                    yield all_movies_list
+                    all_movies_list = ""
 
-        return f"{all_movies_list}"
+        yield all_movies_list
 
     def tag(self, username: str, *args):
         user_id = self._lookup_user_id(username)
@@ -145,10 +153,15 @@ class Radarr:
 
         movie_id = args[0]
 
-        movie = self.api.get_movie(id_=movie_id)
+        movies = self.api.get_movie(id_=movie_id, tmdb=True)
 
-        if movie is None:
+        if movies is None or len(movies) == 0:
             return "No movie found with ID {movie_id}"
+
+        if len(movies) > 1:
+            return "Multiple movies found for ID {movie_id}!"
+
+        movie = movies[0]
 
         if user_id in movie["tags"]:
             return f"Movie {movie['title']} ({movie['year']}) is already tagged for you"
@@ -166,7 +179,15 @@ class Radarr:
 
         movie_id = args[0]
 
-        movie = self.api.get_movie(id_=movie_id)
+        movies = self.api.get_movie(id_=movie_id, tmdb=True)
+
+        if movies is None or len(movies) == 0:
+            return "No movie found with ID {movie_id}"
+
+        if len(movies) > 1:
+            return "Multiple movies found for ID {movie_id}!"
+
+        movie = movies[0]
 
         if movie is None:
             return "No movie found with ID {movie_id}"
@@ -192,26 +213,30 @@ class Radarr:
             yield "No movies found for search string {search_string}"
             return
 
+        text = ""
         for movie in movies:
-            text = f"{movie['imdbId']} {movie['title']} ({movie['year']})\n"
-            text += f"> {movie['overview']}"
-            yield text
+            text += movie_text_line(movie) + "\n"
+            if len(text) > 1800:
+                yield text
+                text = ""
+
+        yield text
 
     def add_movie(self, username, *args):
         if len(args) == 0:
-            yield "Please provide an IMDB ID (tt...)"
+            yield "Please provide the TMDB ID"
             return
 
-        imdb_id = args[0]
+        tmdb_id = args[0]
 
-        movie = self.api.lookup_movie(term=f"imdb:{imdb_id}")
+        movie = self.api.lookup_movie(term=f"tmdb:{tmdb_id}")
 
         if movie is None:
-            yield f"No movie found for IMDB ID {imdb_id}"
+            yield f"No movie found for TMDB ID {tmdb_id}"
             return
 
         if len(movie) > 1:
-            yield f"Found multiple matches for IMDB ID {imdb_id}"
+            yield f"Found multiple matches for TMDB ID {tmdb_id}"
             return
 
         movie = movie[0]
@@ -220,14 +245,19 @@ class Radarr:
         quality_profile = self._get_quality_profile()
         user_id = self._lookup_user_id(username)
 
-        movie = self.api.add_movie(
-            root_dir=root_dir['path'],
-            movie=movie,
-            quality_profile_id=quality_profile['id'],
-            tags=[user_id]
-        )
-
-        yield f"Added {movie['title']} ({movie['year']})"
+        try:
+            movie = self.api.add_movie(
+                root_dir=root_dir['path'],
+                movie=movie,
+                quality_profile_id=quality_profile['id'],
+                tags=[user_id]
+            )
+            yield f"Added {movie['title']} ({movie['year']})"
+        except pyarr.exceptions.PyarrBadRequest as e:
+            if "This movie has already been added" in str(e):
+                yield f"Movie {movie['title']} ({movie['year']}) is already added"
+            else:
+                yield f"Error adding movie: {e}"
 
     def _get_quality_profile(self):
         desired_profile = os.environ.get("RADARR_QUALITY_PROFILE", 'Bluray|WEB-1080p')

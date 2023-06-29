@@ -87,8 +87,8 @@ async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
 
     # Me - list movies tagged with user
     elif cmd == 'me':
-        text = RADARR.me(ctx.author.name, *args)
-        await ctx.author.send(f"`{text}`")
+        for text in RADARR.me(ctx.author.name, *args):
+            await ctx.author.send(f"`{text}`")
 
     # Tag
     elif cmd == 'tag':
