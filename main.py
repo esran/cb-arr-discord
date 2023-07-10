@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Discord bot for doing stuff with *arrs
+Discord bot for doing stuff with radarr [etc.]
 """
 
 import logging
@@ -35,7 +35,7 @@ INTENTS.message_content = True
 BOT = commands.Bot(
     command_prefix='!',
     intents=INTENTS,
-    description="Discord bot for doing stuff with *arrs",
+    description="Discord bot for doing stuff with radarr [etc.]",
     help_command=None
 )
 
@@ -77,7 +77,7 @@ async def radarr(ctx: commands.Context, cmd: Optional[str] = None, *args):
 
     # Status - list summary of movies
     elif cmd == 'status':
-        for text in RADARR.status():
+        for text in RADARR.status(*args):
             await ctx.send(f"`{text}`")
 
     # List - list all movies
